@@ -139,7 +139,7 @@ def debug(select):
         np_mel_spectrogram = np.dot(np.abs(np_stft_matrix.T) ** 2, np_melW)
 
         np_logmel_spectrogram = librosa.core.power_to_db(
-            np_mel_spectrogram, ref=ref, amin=amin, top_db=top_db)
+            np_mel_spectrogram, ref=ref, amin=aminso, top_db=top_db)
 
         # TF mel spectrogram
         input = tf.keras.layers.Input((data_length,))

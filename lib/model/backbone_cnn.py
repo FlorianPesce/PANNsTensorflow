@@ -31,6 +31,7 @@ class ConvBlock(tf.keras.Model):
 
     def call(self, inputs, pool_size=(2, 2), pool_type='avg'):
 
+        # NOTE move pool_type to init.
         x = inputs
         x = tf.keras.activations.relu(self.bn1(self.conv1(x)))
         x = tf.keras.activations.relu(self.bn2(self.conv2(x)))
@@ -46,6 +47,7 @@ class ConvBlock(tf.keras.Model):
         else:
             raise ValueError("pool_type should be one of the following:\
             max, avg or avg+max. Here, we got {}.".format(pool_type))
+            # NOTE change to fstring
         
         return x
 
@@ -53,6 +55,8 @@ class Cnn14(tf.keras.Model):
     """
     CNN14 Backbone
     """
+    # NOTE: I did everything. only leave backbone in here
+    # NOTE add name argument in init
     def __init__(self, sample_rate, window_size, hop_size, mel_bins,
                  fmin, fmax, classes_num):
         # NOTE Add Docstring
@@ -67,11 +71,11 @@ class Cnn14(tf.keras.Model):
 
         # Spectogram extractor
         self.spectrogram_extractor = Spectrogram(n_fft=window_size,
-        hop_length=hop_size) # NOTE Missing parameters: win_length, window, center, pad_mode, freeze_parameters
+                                                 hop_length=hop_size) # NOTE Missing parameters: win_length, window, center, pad_mode, freeze_parameters
 
         self.logmel_extractor = Logmel(sample_rate=sample_rate,
-        win_length=window_size, n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref,
-        amin=amin, top_db=top_db) # NOTE Missing parameter: freeze_parameters
+                win_length=window_size, n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref,
+                amin=amin, top_db=top_db) # NOTE Missing parameter: freeze_parameters
 
         self.spec_augmenter = # NOTE Missing SpecAugmentation function
 
@@ -84,12 +88,14 @@ class Cnn14(tf.keras.Model):
         self.conv_block5 = ConvBlock(out_channels=1024)
         self.conv_block6 = ConvBlock(out_channels=2048)
 
+        # NOTE uuse_bias==True
         self.fc1 = tf.keras.layers.Dense(2048, use_bias=True)
         self.fc_audioset = tf.keras.layers.Dense(classes_num, use_bias=True)
 
-        # NOTE Question: Need to initialize?
+        # NOTE Question: Need to initialize?. -> Do it in arguments.
 
     def call(self, inputs, mixup_lambda=None):
+        # NOTE add training in call
         """
         Parameters
         ----------
@@ -97,9 +103,11 @@ class Cnn14(tf.keras.Model):
         mixup_lambda : (batch_size * 2,), optional
         """
 
+        # NOTE add comment to say that second dimension is channels
         x = self.spectrogram_extractor(inputs) # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x) # (batch_size, 1, time_steps, mel_bins)
 
+        # NOTE investigate or ask qiuqiang. 
         x = tf.transpose(x, perm=[0, 3, 2, 1])
         x = self.bn0(x)
         x = tf.transpose(x, perm=[0, 3, 2, 1])
@@ -107,12 +115,16 @@ class Cnn14(tf.keras.Model):
         if self.training:
             x = self.spec_augmenter(x)
 
+        # NOTE move mixup bool as an attribut
+        # NOTE create lambda uniform in call
+        # NOTE create a lambda attribut: update it every time a forward function is used
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
 
+        # NOTE add dropout_rates in init.
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = tf.keras.layers.Dropout(.2)(x) # NOTE Question: training attribute on dropout layers?
+        x = tf.keras.layers.Dropout(.2)(x) # NOTE add training attribute on dropout layers
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = tf.keras.layers.Dropout(.2)(x)
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -123,10 +135,11 @@ class Cnn14(tf.keras.Model):
         x = tf.keras.layers.Dropout(.2)(x)
         x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
         x = tf.keras.layers.Dropout(.2)(x)
-        x = tf.math.reduce_mean(x, axis=3)
+        x = tf.math.reduce_mean(x, axis=-1)
 
-        (x1, _) = tf.math.reduce_max(x, axis=2)
-        x2 = tf.math.reduce_mean(x, axis=2)
+        # NOTE test if I need parenthesis
+        (x1, _) = tf.math.reduce_max(x, axis=-1)
+        x2 = tf.math.reduce_mean(x, axis=-1)
         x = x1 + x2
         x = tf.keras.layers.Dropout(.5)(x)
         x = tf.keras.activations.relu(self.fc1(x))
