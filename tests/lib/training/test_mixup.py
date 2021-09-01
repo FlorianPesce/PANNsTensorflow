@@ -35,9 +35,8 @@ def test_do_mixup(input, mixup_lambda):
     bool_err = (tf.abs(output - expected_output)
            < tf.constant(1e-6, dtype=tf.float32, shape = input.shape))
 
-    bool_err = tf.reduce_all(bool_err)
+    assert tf.reduce_all(bool_err)
 
-    assert bool_err
 
     
 
