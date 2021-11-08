@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-class ConvBlock(tf.keras.Model):
+class ConvBlock(tf.keras.layers.Layer):
     """
     Convolutional Block Class.
     """
@@ -16,6 +16,8 @@ class ConvBlock(tf.keras.Model):
             Type of pooling
         """
         super(ConvBlock, self).__init__()
+
+        self.out_channels = out_channels
         
         self.conv1 = tf.keras.layers.Conv2D(filters=out_channels,
                                             kernel_size=3, strides=1,
@@ -31,6 +33,7 @@ class ConvBlock(tf.keras.Model):
                                             kernel_initializer='glorot_uniform')
         self.bn2 = tf.keras.layers.BatchNormalization()
 
+        self.pool_size = pool_size
         self.pool_type = pool_type
         if pool_type == 'max':
             self.pooling = tf.keras.layers.MaxPool2D(pool_size = pool_size)
@@ -45,6 +48,11 @@ class ConvBlock(tf.keras.Model):
         
 
     def call(self, inputs):
+        """
+        Parameters
+        ----------
+        inputs : (batch_size, height, width, channels)
+        """
 
         x = inputs
         x = tf.keras.activations.relu(self.bn1(self.conv1(x)))
@@ -59,12 +67,11 @@ class ConvBlock(tf.keras.Model):
         
         return x
 
-class Cnn14(tf.keras.Model):
+class Cnn14(tf.keras.layers.Layer):
     """
     CNN14 Backbone
     """
-    def __init__(self, classes_num, dropout_rate=0.2,
-                 include_top=True, name="cnn14_backbone"):
+    def __init__(self, dropout_rate=0.2, name="cnn14_backbone"):
         """
         Parameters
         ----------
@@ -78,7 +85,6 @@ class Cnn14(tf.keras.Model):
         super(Cnn14, self).__init__()
 
         self.dropout_rate = dropout_rate
-        self.include_top = include_top
 
         self.conv_block2 = ConvBlock(out_channels=128)
         self.conv_block3 = ConvBlock(out_channels=256)
@@ -89,40 +95,34 @@ class Cnn14(tf.keras.Model):
         self.fc1 = tf.keras.layers.Dense(2048, use_bias=True,
             kernel_initializer='glorot_uniform')
 
-        # if include_top is False, then fc_audioset is not needed
-        if include_top:
-            self.fc_audioset = tf.keras.layers.Dense(classes_num,
-                use_bias=True, kernel_initializer='glorot_uniform')
-
 
     def call(self, inputs, training=True):
         """
         Parameters
         ----------
-        inputs : (batch_size, data_length)
+        inputs : (batch_size, height, width, channels)
         """
 
         x = inputs
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = self.conv_block2(x)
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = self.conv_block3(x)
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = self.conv_block4(x)
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = self.conv_block5(x)
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = self.conv_block6(x)
+        x = tf.keras.layers.Dropout(self.dropout_rate)(x, training=training) 
+        x = tf.math.reduce_mean(x, axis=1) # freq dimension
 
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x) 
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x)
-        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x)
-        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x)
-        x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg')
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x)
-        x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        x = tf.keras.layers.Dropout(self.dropout_rate, training=training)(x)
-        x = tf.math.reduce_mean(x, axis=-1)
-
-        x1, _ = tf.math.reduce_max(x, axis=-1)
-        x2 = tf.math.reduce_mean(x, axis=-1)
+        x1 = tf.math.reduce_max(x, axis=1) # time dimension
+        x2 = tf.math.reduce_mean(x, axis=1) # time dimension
         x = x1 + x2
-        x = tf.keras.layers.Dropout(.5)(x)
+        x = tf.keras.layers.Dropout(.5)(x, training=training)
         x = tf.keras.activations.relu(self.fc1(x))
-        embedding = tf.keras.layers.Dropout(.5)(x)
+        embedding = tf.keras.layers.Dropout(.5)(x, training=training)
     
         return embedding
 

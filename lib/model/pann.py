@@ -1,8 +1,8 @@
 from lib.training.mixup import generate_lambda
 import tensorflow as tf
-from wavegram import Wavegram
-from logmel_spectrogram import LogmelSpectrogram
-from backbone_cnn import Cnn14, ConvBlock
+from lib.model.wavegram import Wavegram
+from lib.model.logmel_spectrogram import LogmelSpectrogram
+from lib.model.backbone_cnn import Cnn14, ConvBlock
 
 class Wavegram_Logmel_Cnn14(tf.keras.Model):
     """
@@ -46,9 +46,11 @@ class Wavegram_Logmel_Cnn14(tf.keras.Model):
         self.spectrogram = LogmelSpectrogram(sample_rate, window_size,
                 hop_size, mel_bins, fmin, fmax)
         self.conv_block1 = ConvBlock(out_channels=64, pool_size=(2, 2))
-        self.backbone = (Cnn14(classes_num, dropout_rate, include_top) 
+        self.backbone = (Cnn14(dropout_rate, include_top) 
                 if backbone is None else backbone)
         
+        self.classes_num = classes_num
+        self.include_top = include_top
         # if include_top is False, then fc_audioset is not needed
         if include_top:
             self.fc_audioset = tf.keras.layers.Dense(classes_num,
@@ -59,12 +61,18 @@ class Wavegram_Logmel_Cnn14(tf.keras.Model):
 
 
     def call(self, inputs, training=True):
+        """
+        Parameters
+        ----------
+        inputs : (batch_size, data_length)
+        training : bool, optional
+        """
 
         if training:
             mixup_lambda = generate_lambda(self.alpha_mixup,
-                self.beta_mixup, tf.shape(input)[0])
+                self.beta_mixup, tf.shape(inputs)[0])
         else:
-            mixup_lambda = tf.ones(shape=tf.shape(input))
+            mixup_lambda = tf.ones(shape=tf.shape(inputs))
 
         x1 = inputs
         x1 = self.wavegram(x1, mixup_lambda, training)
@@ -73,12 +81,12 @@ class Wavegram_Logmel_Cnn14(tf.keras.Model):
         x2 = self.spectrogram(x2, mixup_lambda, training)
         x2 = self.conv_block1(x2)
 
-        x = tf.concat(x1, x2, axis=1)
+        x = tf.concat([x1, x2], axis=1)
 
         embedding = self.backbone(x)
 
         if self.include_top:
-            clipwise_output = tf.math.sigmoid(self.fc_audioset(y))
+            clipwise_output = tf.math.sigmoid(self.fc_audioset(embedding))
             return clipwise_output, embedding
         else:
             return embedding
